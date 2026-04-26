@@ -10,6 +10,7 @@ Uso:
 
 Dependência: PyYAML (`pip install pyyaml`)
 """
+
 import os
 import sys
 import ipaddress
@@ -17,17 +18,20 @@ from collections import defaultdict, deque
 
 try:
     import yaml
-except Exception:
+except ImportError:
     print("PyYAML não está instalado. Instale com: pip install pyyaml")
     sys.exit(1)
 
 
 BASE_DIR = os.path.dirname(__file__)
+
+
 def get_resource_path(relative_path):
     """Retorna o caminho absoluto do recurso, compatível com PyInstaller."""
     if getattr(sys, "_MEIPASS", None):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(BASE_DIR, relative_path)
+
 
 NETS_FILE = get_resource_path("networks.yml")
 TOPO_FILE = get_resource_path("topology.yml")
@@ -38,7 +42,8 @@ os.makedirs(OUT_DIR, exist_ok=True)
 def get_link_interface(topo, link_name, device_name):
     """Retorna a interface declarada para um endpoint de link, se existir.
 
-    Procura por campos `interface`, `port` ou `if` no endpoint.
+    Procura por campos em ordem de prioridade: `interface` > `port` > `if`.
+    Retorna None se nenhum campo for definido.
     """
     for l in topo.get("links", []) or []:
         if l.get("name") == link_name:
@@ -51,8 +56,11 @@ def get_link_interface(topo, link_name, device_name):
 def iface_from_connect(device_name, connect, topo):
     """Determina a interface a usar para uma entrada `connect`.
 
-    Prioriza a propriedade `interface` em `connect`, depois procura no
-    `links` correspondente por um endpoint com interface declarada.
+    Prioridade:
+    1. Campo `interface` em `connect`
+    2. Campo `interface` no endpoint do link correspondente
+    3. Campo `port` ou `if` no endpoint
+    4. Retorna None se nenhuma declaração for encontrada
     """
     if not isinstance(connect, dict):
         return None
@@ -91,14 +99,25 @@ def collect_network_entries(nets_yaml):
         if not data:
             continue
         if "network" in data:
-            e = {"owner": name, "network": data["network"], "mask": int(data["mask"]), "hosts": data.get("hosts", [])}
+            e = {
+                "owner": name,
+                "network": data["network"],
+                "mask": int(data["mask"]),
+                "hosts": data.get("hosts", []),
+            }
             entries.append(e)
             for h in e["hosts"]:
                 if isinstance(h, dict) and h.get("ip"):
                     host_ips.add(h["ip"])
         elif "vlans" in data:
             for vlan in data["vlans"]:
-                e = {"owner": name, "vlan": vlan.get("vlan"), "network": vlan["network"], "mask": int(vlan["mask"]), "hosts": vlan.get("hosts", [])}
+                e = {
+                    "owner": name,
+                    "vlan": vlan.get("vlan"),
+                    "network": vlan["network"],
+                    "mask": int(vlan["mask"]),
+                    "hosts": vlan.get("hosts", []),
+                }
                 entries.append(e)
                 for h in e["hosts"]:
                     if isinstance(h, dict) and h.get("ip"):
@@ -114,8 +133,24 @@ def build_adjacency(topo):
         if len(eps) != 2:
             continue
         a, b = eps
-        adj[a.get("device")].append({"peer": b.get("device"), "local_ip": a.get("ip"), "peer_ip": b.get("ip"), "link": l.get("name"), "network": l.get("network")})
-        adj[b.get("device")].append({"peer": a.get("device"), "local_ip": b.get("ip"), "peer_ip": a.get("ip"), "link": l.get("name"), "network": l.get("network")})
+        adj[a.get("device")].append(
+            {
+                "peer": b.get("device"),
+                "local_ip": a.get("ip"),
+                "peer_ip": b.get("ip"),
+                "link": l.get("name"),
+                "network": l.get("network"),
+            }
+        )
+        adj[b.get("device")].append(
+            {
+                "peer": a.get("device"),
+                "local_ip": b.get("ip"),
+                "peer_ip": a.get("ip"),
+                "link": l.get("name"),
+                "network": l.get("network"),
+            }
+        )
     return adj
 
 
@@ -132,13 +167,17 @@ def device_network_map(topo):
                     else:
                         mask = c.get("mask")
                         if mask:
-                            m[name].append(ipaddress.ip_network(f"{netval}/{mask}", strict=False))
+                            m[name].append(
+                                ipaddress.ip_network(f"{netval}/{mask}", strict=False)
+                            )
                 for nn in c.get("networks") or []:
                     m[name].append(ipaddress.ip_network(nn, strict=False))
     for s in topo.get("switches", []) or []:
         for v in s.get("vlans", []) or []:
             if v.get("network"):
-                m[s.get("name")].append(ipaddress.ip_network(v.get("network"), strict=False))
+                m[s.get("name")].append(
+                    ipaddress.ip_network(v.get("network"), strict=False)
+                )
     return m
 
 
@@ -148,20 +187,43 @@ def assign_gateways(net_entries, host_ips):
     for e in net_entries:
         net = ipaddress.ip_network(f"{e['network']}/{e['mask']}", strict=False)
         gw = None
-        for h in net.hosts():
-            hip = str(h)
-            if hip not in host_ips and hip not in assigned:
-                gw = hip
-                assigned.add(gw)
-                break
+        try:
+            for h in net.hosts():
+                hip = str(h)
+                if hip not in host_ips and hip not in assigned:
+                    gw = hip
+                    assigned.add(gw)
+                    break
+        except (StopIteration, ValueError):
+            pass
         if not gw:
-            gw = str(next(net.hosts()))
-        gateway_map[f"{net.network_address}/{net.prefixlen}"] = {"gateway": gw, "net": net}
+            try:
+                gw = str(next(net.hosts()))
+            except StopIteration:
+                raise ValueError(
+                    f"Rede {net} não possui hosts disponíveis para gateway"
+                )
+        gateway_map[f"{net.network_address}/{net.prefixlen}"] = {
+            "gateway": gw,
+            "net": net,
+        }
     return gateway_map
 
 
 def bfs_next_hop(adj, device_to_netobjs, src, target_net):
-    targets = [d for d, nets in device_to_netobjs.items() if any((n.network_address == target_net.network_address and n.prefixlen == target_net.prefixlen) for n in nets)]
+    if not isinstance(target_net, ipaddress.IPv4Network):
+        raise TypeError(f"target_net deve ser IPv4Network, recebido {type(target_net)}")
+    targets = [
+        d
+        for d, nets in device_to_netobjs.items()
+        if any(
+            (
+                n.network_address == target_net.network_address
+                and n.prefixlen == target_net.prefixlen
+            )
+            for n in nets
+        )
+    ]
     if not targets:
         return None
     q = deque([src])
@@ -205,12 +267,17 @@ def generate_router_configs(topo, net_entries, gateway_map, adj, device_to_netob
         lines.append("enable secret root")
         lines.append("service password-encryption")
         iface_idx = 0
-        lan_connects = [c for c in r.get("connects", []) or [] if c.get("type") == "lan"]
-        p2p_connects = [c for c in r.get("connects", []) or [] if c.get("type") == "p2p"]
+        lan_connects = [
+            c for c in r.get("connects", []) or [] if c.get("type") == "lan"
+        ]
+        p2p_connects = [
+            c for c in r.get("connects", []) or [] if c.get("type") == "p2p"
+        ]
 
         # Router-on-a-stick (subinterfaces) when multiple LANs
+        # Nota: Se len(lan_connects) == 1, usa configuração simples sem subinterfaces
         if len(lan_connects) > 1:
-            # prefira interface física declarada na topologia
+            # Prioridade: interface declarada em qualquer connect > padrão GigabitEthernet0/0
             phys_if = None
             for c in lan_connects:
                 if c.get("interface"):
@@ -237,21 +304,34 @@ def generate_router_configs(topo, net_entries, gateway_map, adj, device_to_netob
                         for v in s.get("vlans", []) or []:
                             if v.get("network"):
                                 try:
-                                    vnet = ipaddress.ip_network(v.get("network"), strict=False)
-                                except Exception:
+                                    vnet = ipaddress.ip_network(
+                                        v.get("network"), strict=False
+                                    )
+                                except (
+                                    ipaddress.AddressValueError,
+                                    ipaddress.NetmaskValueError,
+                                ):
                                     continue
-                                if vnet.network_address == netobj.network_address and vnet.prefixlen == netobj.prefixlen:
+                                if (
+                                    vnet.network_address == netobj.network_address
+                                    and vnet.prefixlen == netobj.prefixlen
+                                ):
                                     vlan_id = v.get("id") or v.get("vlan")
                     if not vlan_id:
-                        vlan_id = int(str(netobj.network_address).split('.')[-1])
-                    gw_entry = gateway_map.get(f"{netobj.network_address}/{netobj.prefixlen}")
-                    gw_ip = gw_entry["gateway"] if gw_entry else str(next(netobj.hosts()))
+                        vlan_id = int(str(netobj.network_address).split(".")[-1])
+                    gw_entry = gateway_map.get(
+                        f"{netobj.network_address}/{netobj.prefixlen}"
+                    )
+                    gw_ip = (
+                        gw_entry["gateway"] if gw_entry else str(next(netobj.hosts()))
+                    )
                     lines.append(f"interface {phys_if}.{vlan_id}")
                     lines.append(f" encapsulation dot1Q {vlan_id}")
                     lines.append(f" ip address {gw_ip} {str(netobj.netmask)}")
                     lines.append(" no shutdown")
 
         else:
+            # Configuração simples de LAN (sem subinterfaces)
             for c in lan_connects:
                 nets = []
                 netval = c.get("network")
@@ -266,9 +346,13 @@ def generate_router_configs(topo, net_entries, gateway_map, adj, device_to_netob
                     nets = c.get("networks") or []
                 for netstr in nets:
                     netobj = ipaddress.ip_network(netstr, strict=False)
-                    gw_entry = gateway_map.get(f"{netobj.network_address}/{netobj.prefixlen}")
-                    gw_ip = gw_entry["gateway"] if gw_entry else str(next(netobj.hosts()))
-                    # interface: priorize declaram 'interface' na conexão, senão aloca dinamicamente
+                    gw_entry = gateway_map.get(
+                        f"{netobj.network_address}/{netobj.prefixlen}"
+                    )
+                    gw_ip = (
+                        gw_entry["gateway"] if gw_entry else str(next(netobj.hosts()))
+                    )
+                    # Interface: prioridade = declarada em 'interface' > alocação dinâmica
                     if c.get("interface"):
                         phys_if = c.get("interface")
                     else:
@@ -282,20 +366,32 @@ def generate_router_configs(topo, net_entries, gateway_map, adj, device_to_netob
         for c in p2p_connects:
             link = c.get("link")
             local_ip = c.get("local_ip")
+            if not local_ip:
+                raise ValueError(
+                    f"Link P2P '{link}' sem IP local definido para roteador {name}"
+                )
             link_net = None
             for l in topo.get("links", []) or []:
                 if l.get("name") == link:
                     link_net = l.get("network")
             if link_net:
-                netobj = ipaddress.ip_network(link_net, strict=False)
-                mask = str(netobj.netmask)
+                try:
+                    netobj = ipaddress.ip_network(link_net, strict=False)
+                    mask = str(netobj.netmask)
+                except (ipaddress.AddressValueError, ipaddress.NetmaskValueError) as e:
+                    raise ValueError(
+                        f"Rede inválida no link '{link}': {link_net} - {e}"
+                    )
             else:
                 mask = "255.255.255.252"
-            # determina interface: prioridade -> connect.interface -> link endpoint.interface -> alocação dinâmica
+            # Determinação de interface: prioridade declarada em connect > link endpoint > alocação dinâmica
             if c.get("interface"):
                 phys_if = c.get("interface")
             else:
-                phys_if = get_link_interface(topo, link, name) or f"GigabitEthernet0/{iface_idx}"
+                phys_if = (
+                    get_link_interface(topo, link, name)
+                    or f"GigabitEthernet0/{iface_idx}"
+                )
                 if phys_if.startswith("GigabitEthernet0/"):
                     iface_idx += 1
             lines.append(f"interface {phys_if}")
@@ -316,14 +412,24 @@ def generate_router_configs(topo, net_entries, gateway_map, adj, device_to_netob
             if c.get("type") == "lan":
                 netval = c.get("network")
                 if netval:
-                    if isinstance(netval, str) and "/" in netval:
-                        n = ipaddress.ip_network(netval, strict=False)
-                    else:
-                        mask = c.get("mask")
-                        if mask:
-                            n = ipaddress.ip_network(f"{netval}/{mask}", strict=False)
+                    try:
+                        if isinstance(netval, str) and "/" in netval:
+                            n = ipaddress.ip_network(netval, strict=False)
                         else:
-                            n = ipaddress.ip_network(str(netval), strict=False)
+                            mask = c.get("mask")
+                            if not mask:
+                                raise ValueError(
+                                    f"Rede '{netval}' definida sem máscara. Defina 'mask' ou use formato CIDR (ex: '10.0.0.0/24')"
+                                )
+                            n = ipaddress.ip_network(f"{netval}/{mask}", strict=False)
+                    except (
+                        ipaddress.AddressValueError,
+                        ipaddress.NetmaskValueError,
+                    ) as e:
+                        print(
+                            f"Aviso: Rede inválida em roteador {name}: {netval}/{mask if not isinstance(netval, str) or '/' not in str(netval) else 'CIDR'} - {e}"
+                        )
+                        continue
                     direct_nets.add((n.network_address, n.prefixlen))
                 for nn in c.get("networks") or []:
                     n = ipaddress.ip_network(nn, strict=False)
@@ -341,7 +447,9 @@ def generate_router_configs(topo, net_entries, gateway_map, adj, device_to_netob
                 continue
             next_hop = bfs_next_hop(adj, device_to_netobjs, name, netobj)
             if next_hop:
-                lines.append(f"ip route {netobj.network_address} {str(netobj.netmask)} {next_hop}")
+                lines.append(
+                    f"ip route {netobj.network_address} {str(netobj.netmask)} {next_hop}"
+                )
 
         # SSH on vty
         lines.append("line vty 0 4")
@@ -421,7 +529,11 @@ def generate_switch_configs(topo, gateway_map):
 
         # trunk to uplink router
         if s.get("uplink"):
-            uplink_iface = s.get("uplink_interface") or find_router_connect_interface_for_switch(topo, name) or "GigabitEthernet0/1"
+            uplink_iface = (
+                s.get("uplink_interface")
+                or find_router_connect_interface_for_switch(topo, name)
+                or "GigabitEthernet0/1"
+            )
             lines.append(f"interface {uplink_iface}")
             lines.append(f" description trunk to {s.get('uplink')}")
             lines.append(" switchport trunk encapsulation dot1q")
@@ -433,7 +545,9 @@ def generate_switch_configs(topo, gateway_map):
                     native = 99
             if native:
                 lines.append(" switchport trunk native vlan 99")
-            allowed = ",".join(str((v.get("id") or v.get("vlan"))) for v in s.get("vlans", []) or [])
+            allowed = ",".join(
+                str((v.get("id") or v.get("vlan"))) for v in s.get("vlans", []) or []
+            )
             if allowed:
                 lines.append(f" switchport trunk allowed vlan {allowed}")
             lines.append(" no shutdown")
@@ -453,7 +567,9 @@ def main():
     device_to_netobjs = device_network_map(topo)
     gateway_map = assign_gateways(net_entries, host_ips)
 
-    r_cfgs = generate_router_configs(topo, net_entries, gateway_map, adj, device_to_netobjs)
+    r_cfgs = generate_router_configs(
+        topo, net_entries, gateway_map, adj, device_to_netobjs
+    )
     sw_cfgs = generate_switch_configs(topo, gateway_map)
 
     # write only router and switch IOS configs

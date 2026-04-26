@@ -10,6 +10,7 @@ Uso:
 Dependências:
   - PyInstaller (instalado no ambiente virtual)
 """
+
 import os
 import subprocess
 import sys
@@ -39,7 +40,13 @@ def run_pyinstaller():
     # se pyi_exec contém espaço (ex: 'python -m PyInstaller'), devemos passar como lista ao shell
     if pyi_exec.startswith(sys.executable):
         # chamar via interprete -m PyInstaller
-        pyinstaller_cmd = [sys.executable, "-m", "PyInstaller", "--noconfirm", "--onefile"]
+        pyinstaller_cmd = [
+            sys.executable,
+            "-m",
+            "PyInstaller",
+            "--noconfirm",
+            "--onefile",
+        ]
     else:
         pyinstaller_cmd = [pyi_exec, "--noconfirm", "--onefile"]
 
@@ -66,7 +73,9 @@ def run_pyinstaller():
 def main():
     """Função principal para orquestrar o build."""
     if not os.path.exists(os.path.join(BASE_DIR, ".venv")):
-        print("Ambiente virtual não encontrado. Certifique-se de ativá-lo antes de executar este script.")
+        print(
+            "Ambiente virtual não encontrado. Certifique-se de ativá-lo antes de executar este script."
+        )
         sys.exit(1)
 
     if not os.path.exists(os.path.join(BASE_DIR, SCRIPT_NAME)):
