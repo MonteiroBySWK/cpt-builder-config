@@ -74,11 +74,12 @@ jobs:
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
             artifacts/cisco_gen-linux/cisco_gen
             artifacts/cisco_gen-windows.exe/cisco_gen.exe
             artifacts/cisco_gen-macos/cisco_gen
+          tag_name: v${{ github.run_number }}
+          name: Release ${{ github.run_number }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
