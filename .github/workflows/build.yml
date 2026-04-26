@@ -19,15 +19,15 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            python-version: '3.14'
+            python-version: '3.12'
             executable-name: cisco_gen
             artifact-name: cisco_gen-linux
           - os: windows-latest
-            python-version: '3.14'
+            python-version: '3.12'
             executable-name: cisco_gen.exe
             artifact-name: cisco_gen-windows.exe
           - os: macos-latest
-            python-version: '3.14'
+            python-version: '3.12'
             executable-name: cisco_gen
             artifact-name: cisco_gen-macos
 
