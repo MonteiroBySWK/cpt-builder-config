@@ -108,7 +108,16 @@ topology:
 
     - name: SW2_NTI
       uplink: NTI
-      notes: "switch de acesso NTI, usar trunks para VLANs 10/20/30/99"
+      trunk_to: SW1_NTI
+      vlans:
+        - id: 10
+          network: 172.16.1.96/27
+        - id: 20
+          network: 172.16.1.128/27
+        - id: 30
+          network: 172.16.1.160/27
+        - id: 99
+          network: 172.16.1.192/27
 
   links:
     - name: REITORIA-NTI

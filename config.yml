@@ -1,0 +1,42 @@
+# config.yml - Configuração global do gerador de configs Cisco
+
+# Configurações globais
+global:
+  domain_name: example.com
+
+# SSH / VTY
+ssh:
+  enabled: true
+  vty_range: "0 4"        # vty 0 até 4
+  transport: ssh          # ssh ou telnet (recomenda-se ssh)
+
+# Credenciais
+credentials:
+  username: admin
+  password: adminssh
+  enable_password: root
+
+# Interfaces de rede (padrões)
+interfaces:
+  router:
+    default_prefix: GigabitEthernet  # Prefixo de interface LAN
+    default_slot: 0                  # Slot (GigabitEthernet 0/X)
+    default_port: 0                  # Primeira porta (0/0, 0/1, ...)
+    p2p_prefix: Serial               # Prefixo para links P2P
+    p2p_slot: 0/0                    # Slot para P2P (Serial 0/0/X)
+  switch:
+    trunk_default: GigabitEthernet0/1  # Uplink padrão
+
+# VLANs
+vlans:
+  native_vlan: 99              # VLAN nativa para trunks
+  default_mask: 255.255.255.0  # Máscara padrão para management
+
+# Roteamento
+routing:
+  p2p_mask: 255.255.255.252  # Máscara para links P2P (/30)
+
+# Segurança
+security:
+  password_encryption: true  # Aplicar "service password-encryption"
+  aaa_enabled: false         # Habilitar AAA/RADIUS (não implementado ainda)

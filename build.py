@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
 """
-build.py
+build.py - Gerador de executável portátil.
 
-Script para automatizar o processo de geração de executáveis com PyInstaller.
-
-Uso:
-  python3 build.py
-
-Dependências:
-  - PyInstaller (instalado no ambiente virtual)
+Gera um único arquivo executável que lê os arquivos .yml externos
+localizados na mesma pasta que ele.
 """
 
 import os
@@ -16,84 +11,65 @@ import subprocess
 import sys
 import shutil
 
-BASE_DIR = os.path.dirname(__file__)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SCRIPT_NAME = "main.py"
 DIST_DIR = os.path.join(BASE_DIR, "dist")
 BUILD_DIR = os.path.join(BASE_DIR, "build")
 
+def clean_old_builds():
+    """Limpa diretórios de build de forma portável."""
+    for folder in [DIST_DIR, BUILD_DIR]:
+        if os.path.exists(folder):
+            print(f"Limpando {folder}...")
+            try:
+                shutil.rmtree(folder)
+            except Exception as e:
+                print(f"Aviso: não foi possível remover {folder}: {e}")
 
 def run_pyinstaller():
-    """Executa o PyInstaller para gerar o executável."""
-    # localizar o executável do PyInstaller: preferir .venv, depois PATH, depois módulo
-    venv_pyi = os.path.join(BASE_DIR, ".venv", "bin", "pyinstaller")
-    if os.path.exists(venv_pyi):
-        pyi_exec = venv_pyi
+    """Executa o PyInstaller para gerar o executável único."""
+    
+    # 1. Verificar se o script principal existe
+    main_path = os.path.join(BASE_DIR, SCRIPT_NAME)
+    if not os.path.exists(main_path):
+        print(f"Erro: {SCRIPT_NAME} não encontrado.")
+        sys.exit(1)
+
+    # 2. Construir o comando
+    pyi_exec = shutil.which("pyinstaller")
+    if pyi_exec:
+        cmd = [pyi_exec]
     else:
-        pyi_exec = shutil.which("pyinstaller")
-        if not pyi_exec:
-            # fallback para executar como módulo com o mesmo interpretador usado para o build
-            pyi_exec = f"{sys.executable} -m PyInstaller"
+        cmd = [sys.executable, "-m", "PyInstaller"]
 
-    sep = os.pathsep  # ':' em Unix, ';' em Windows
+    sep = os.pathsep
 
-    pyinstaller_cmd = []
-    # se pyi_exec contém espaço (ex: 'python -m PyInstaller'), devemos passar como lista ao shell
-    if pyi_exec.startswith(sys.executable):
-        # chamar via interprete -m PyInstaller
-        pyinstaller_cmd = [
-            sys.executable,
-            "-m",
-            "PyInstaller",
-            "--noconfirm",
-            "--onefile",
-        ]
-    else:
-        pyinstaller_cmd = [pyi_exec, "--noconfirm", "--onefile"]
-
-    # adicionar arquivos de dados (YAMLs) ao bundle
-    for fname in ("networks.yml", "topology.yml"):
-        src = os.path.join(BASE_DIR, fname)
-        if os.path.exists(src):
-            pyinstaller_cmd.extend(["--add-data", f"{src}{sep}."])
-        else:
-            print(f"Aviso: não encontrou {src}; o arquivo não será incluído no bundle.")
-
-    # alvo: script principal
-    pyinstaller_cmd.append(os.path.join(BASE_DIR, SCRIPT_NAME))
+    cmd.extend([
+        "--noconfirm",
+        "--onefile",
+        "--name", "cisco_gen",
+        "--clean",
+        "--add-data", f"src{sep}src",  # Inclui a pasta src no bundle
+        main_path
+    ])
 
     try:
-        print("Executando PyInstaller...")
-        subprocess.run(pyinstaller_cmd, check=True)
-        print(f"Executável gerado em: {DIST_DIR}")
+        print(f"Executando: {' '.join(cmd)}")
+        subprocess.run(cmd, check=True)
+        
+        print("\n" + "="*50)
+        print("✓ Executável portátil gerado com sucesso!")
+        print(f"Local: {os.path.join(DIST_DIR, 'cisco_gen')}")
+        print("\nComo usar no Pendrive:")
+        print("1. Copie o arquivo 'cisco_gen' para o pendrive.")
+        print("2. Coloque seus arquivos .yml na mesma pasta que o 'cisco_gen'.")
+        print("3. O programa lerá os YAMLs externos e gerará a pasta 'configs/'.")
+        print("="*50)
+
     except subprocess.CalledProcessError as e:
-        print(f"Erro ao executar PyInstaller: {e}")
+        print(f"Erro durante o build com PyInstaller: {e}")
         sys.exit(1)
-
-
-def main():
-    """Função principal para orquestrar o build."""
-    if not os.path.exists(os.path.join(BASE_DIR, ".venv")):
-        print(
-            "Ambiente virtual não encontrado. Certifique-se de ativá-lo antes de executar este script."
-        )
-        sys.exit(1)
-
-    if not os.path.exists(os.path.join(BASE_DIR, SCRIPT_NAME)):
-        print(f"Script {SCRIPT_NAME} não encontrado no diretório base.")
-        sys.exit(1)
-
-    # Limpar diretórios antigos
-    if os.path.exists(DIST_DIR):
-        print("Limpando diretório dist/...")
-        subprocess.run(["rm", "-rf", DIST_DIR])
-
-    if os.path.exists(BUILD_DIR):
-        print("Limpando diretório build/...")
-        subprocess.run(["rm", "-rf", BUILD_DIR])
-
-    # Executar o PyInstaller
-    run_pyinstaller()
-
 
 if __name__ == "__main__":
-    main()
+    clean_old_builds()
+    run_pyinstaller()
