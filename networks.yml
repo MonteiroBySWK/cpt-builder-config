@@ -1,83 +1,86 @@
 base:
   x: 1
+  y: 0
+  w: 0
+  z: 0
 
 networks:
   REITORIA:
-    network: 172.16.1.64
+    network: 172.16.x.64
     mask: 27
     hosts:
       - name: HOST 1
-        ip: 172.16.1.65
+        ip: 172.16.x.65
       - name: HOST 2
-        ip: 172.16.1.66
+        ip: 172.16.x.66
 
   CCT:
-    network: 172.16.1.224
+    network: 172.16.x.224
     mask: 28
     hosts:
       - name: HOST 3
-        ip: 172.16.1.225
+        ip: 172.16.x.225
       - name: HOST 4
-        ip: 172.16.1.226
+        ip: 172.16.x.226
 
   NTI:
     vlans:
       - vlan: 10
-        network: 172.16.1.96
+        network: 172.16.x.96
         mask: 27
         hosts:
           - name: HOST 5
-            ip: 172.16.1.97
+            ip: 172.16.x.97
           - name: HOST 6
-            ip: 172.16.1.98
+            ip: 172.16.x.98
       - vlan: 20
-        network: 172.16.1.128
+        network: 172.16.x.128
         mask: 27
         hosts:
           - name: HOST 7
-            ip: 172.16.1.129
+            ip: 172.16.x.129
           - name: HOST 8
-            ip: 172.16.1.130
+            ip: 172.16.x.130
       - vlan: 30
-        network: 172.16.1.160
+        network: 172.16.x.160
         mask: 27
         hosts:
           - name: SERVERWEB
-            ip: 172.16.1.161
+            ip: 172.16.x.161
           - name: SERVERDNS
-            ip: 172.16.1.162
+            ip: 172.16.x.162
       - vlan: 99
-        network: 172.16.1.192
+        network: 172.16.x.192
         mask: 27
         hosts:
           - name: MGMT1
-            ip: 172.16.1.193
+            ip: 172.16.x.193
 
 links:
   - name: REITORIA-NTI
-    network: 172.16.1.240
+    network: 172.16.x.240
     mask: 30
     endpoints:
       - device: REITORIA
-        ip: 172.16.1.241
+        ip: 172.16.x.241
       - device: NTI
-        ip: 172.16.1.242
+        ip: 172.16.x.242
   - name: REITORIA-CCT
-    network: 172.16.1.244
+    network: 172.16.x.244
     mask: 30
     endpoints:
       - device: REITORIA
-        ip: 172.16.1.245
+        ip: 172.16.x.245
       - device: CCT
-        ip: 172.16.1.246
+        ip: 172.16.x.246
   - name: NTI-CCT
-    network: 172.16.1.248
+    network: 172.16.x.248
     mask: 30
     endpoints:
       - device: NTI
-        ip: 172.16.1.249
+        ip: 172.16.x.249
       - device: CCT
-        ip: 172.16.1.250
+        ip: 172.16.x.250
 
 internet:
   provider:

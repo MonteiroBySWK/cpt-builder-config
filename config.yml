@@ -2,11 +2,18 @@
 
 # Configurações globais
 global:
-  domain_name: example.com
+  domain_name: uema.br
+  dns_server: 172.16.x.162  # SERVERDNS IP
+
+# DHCP
+dhcp:
+  enabled: true
+  excluded_count: 10      # Quantidade de IPs para excluir no início do pool (opcional, além do GW)
 
 # SSH / VTY
 ssh:
   enabled: true
+  rsa_key_size: 1024
   vty_range: "0 4"        # vty 0 até 4
   transport: ssh          # ssh ou telnet (recomenda-se ssh)
 

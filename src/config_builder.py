@@ -34,10 +34,13 @@ class ConfigBuilder:
         self.output_dir = output_dir
         os.makedirs(output_dir, exist_ok=True)
 
-        # Carregar configurações
-        self.config = ConfigManager(config_file, topo_file)
+        # Carregar YAMLs primeiro para obter variáveis (x, y, w, z)
         self.yaml_loader = YamlLoader(nets_file, topo_file)
         self.topology = self.yaml_loader.topology
+        self.variables = self.yaml_loader.variables
+
+        # Carregar configurações globais passando as variáveis
+        self.config = ConfigManager(config_file, topo_file, variables=self.variables)
 
         # Processar dados
         self.network_entries, self.host_ips = self._collect_network_entries()

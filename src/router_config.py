@@ -72,8 +72,22 @@ class RouterConfigGenerator:
         if self.config.get("security.password_encryption"):
             lines.append("service password-encryption")
 
+        # DNS global
+        dns_server = self.config.get("global.dns_server")
+        if dns_server:
+            lines.append(f"ip name-server {dns_server}")
+
+        # DHCP
+        if self.config.get("dhcp.enabled"):
+            lines.extend(self._generate_dhcp(router))
+
         # Interfaces LAN e P2P
         lines.extend(self._generate_interfaces(router))
+
+        # RSA Key para SSH
+        if self.config.get("ssh.enabled"):
+            key_size = self.config.get("ssh.rsa_key_size", 1024)
+            lines.append("crypto key generate rsa modulus " + str(key_size))
 
         # Default route
         lines.extend(self._generate_default_route(router))
@@ -94,6 +108,55 @@ class RouterConfigGenerator:
         lines.append("!")
 
         return "\n".join(lines)
+
+    def _generate_dhcp(self, router: Dict) -> List[str]:
+        """Gera configuração de DHCP pools para as redes LAN do roteador."""
+        lines = []
+        name = router.get("name")
+        domain = self.config.get("global.domain_name")
+        dns_server = self.config.get("global.dns_server")
+
+        for connect in router.get("connects", []):
+            if connect.get("type") == "lan":
+                nets = self._extract_networks(connect)
+                for netstr in nets:
+                    try:
+                        netobj = ipaddress.ip_network(netstr, strict=False)
+                        gw_ip = self._get_gateway_ip(netobj)
+                        
+                        # Excluir GW
+                        lines.append(f"ip dhcp excluded-address {gw_ip}")
+                        
+                        # Excluir hosts estáticos
+                        for switch in self.topology.get("switches", []):
+                            # Verifica se o switch está ligado a este roteador e rede
+                            # ou se é o switch do connect
+                            if switch.get("uplink") == name or switch.get("name") == connect.get("switch"):
+                                # Hosts diretos
+                                for host in switch.get("hosts", []):
+                                    hip = host.get("ip")
+                                    if hip and ipaddress.ip_address(hip) in netobj:
+                                        lines.append(f"ip dhcp excluded-address {hip}")
+                                # Hosts em VLANs
+                                for vlan in switch.get("vlans", []):
+                                    for host in vlan.get("hosts", []):
+                                        hip = host.get("ip")
+                                        if hip and ipaddress.ip_address(hip) in netobj:
+                                            lines.append(f"ip dhcp excluded-address {hip}")
+
+                        # Criar Pool
+                        pool_name = f"POOL_{name}_{str(netobj.network_address).replace('.', '_')}"
+                        lines.append(f"ip dhcp pool {pool_name}")
+                        lines.append(f" network {netobj.network_address} {netobj.netmask}")
+                        lines.append(f" default-router {gw_ip}")
+                        if dns_server:
+                            lines.append(f" dns-server {dns_server}")
+                        if domain:
+                            lines.append(f" domain-name {domain}")
+                        lines.append("!")
+                    except (ipaddress.AddressValueError, ipaddress.NetmaskValueError):
+                        pass
+        return lines
 
     def _generate_interfaces(self, router: Dict) -> List[str]:
         """Gera configuração de interfaces (LAN, P2P e Internet)."""
@@ -123,16 +186,35 @@ class RouterConfigGenerator:
 
         return lines
 
+    def _translate_iface(self, iface: Optional[str]) -> Optional[str]:
+        """Traduz abreviações (fa, gi, se) para nomes completos Cisco."""
+        if not iface:
+            return None
+        
+        low = iface.lower()
+        # Mapeamento de prefixos
+        if low.startswith("fa"):
+            return iface.replace(iface[:2], "FastEthernet")
+        if low.startswith("gi"):
+            return iface.replace(iface[:2], "GigabitEthernet")
+        if low.startswith("se"):
+            return iface.replace(iface[:2], "Serial")
+        
+        return iface
+
     def _generate_subinterfaces(self, router: Dict, lan_connects: List[Dict]) -> List[str]:
         """Gera configuração com subinterfaces (router-on-a-stick)."""
         lines = []
         name = router.get("name")
 
-        router_prefix = self.config.get("interfaces.router.default_prefix")
-        router_slot = self.config.get("interfaces.router.default_slot")
-        phys_if = f"{router_prefix}{router_slot}/0"
-
         for connect in lan_connects:
+            # Prioriza interface explícita, senão usa default
+            router_prefix = self.config.get("interfaces.router.default_prefix")
+            router_slot = self.config.get("interfaces.router.default_slot")
+            
+            raw_if = connect.get("interface") or f"{router_prefix}{router_slot}/0"
+            phys_if = self._translate_iface(raw_if)
+
             nets = self._extract_networks(connect)
             for netstr in nets:
                 try:
@@ -165,7 +247,7 @@ class RouterConfigGenerator:
                     gw_ip = self._get_gateway_ip(netobj)
 
                     if connect.get("interface"):
-                        phys_if = connect.get("interface")
+                        phys_if = self._translate_iface(connect.get("interface"))
                     else:
                         phys_if = f"{router_prefix}{router_slot}/{iface_idx}"
                         iface_idx += 1
@@ -197,8 +279,10 @@ class RouterConfigGenerator:
             mask = self._get_p2p_mask(link)
 
             # Tenta obter interface da definição do link
-            phys_if = self._get_p2p_interface(link, name)
-            if not phys_if:
+            raw_if = self._get_p2p_interface(link, name)
+            if raw_if:
+                phys_if = self._translate_iface(raw_if)
+            else:
                 # Fallback: auto-numera
                 phys_if = f"{router_prefix}{router_slot}/{iface_idx}"
                 iface_idx += 1
@@ -395,8 +479,10 @@ class RouterConfigGenerator:
                 mask = self.config.get("routing.p2p_mask")
 
             # Tenta obter interface da definição do link
-            phys_if = self._get_p2p_interface(link, name)
-            if not phys_if:
+            raw_if = self._get_p2p_interface(link, name)
+            if raw_if:
+                phys_if = self._translate_iface(raw_if)
+            else:
                 # Fallback: auto-numera
                 phys_if = f"{router_prefix}{router_slot}/{iface_idx}"
                 iface_idx += 1

@@ -69,6 +69,11 @@ class SwitchConfigGenerator:
         # VLANs
         lines.extend(self._generate_vlans(switch))
 
+        # RSA Key para SSH
+        if self.config.get("ssh.enabled"):
+            key_size = self.config.get("ssh.rsa_key_size", 1024)
+            lines.append("crypto key generate rsa modulus " + str(key_size))
+
         # Management interface
         lines.extend(self._generate_management_interface(switch))
 
@@ -106,6 +111,13 @@ class SwitchConfigGenerator:
         """Gera interface de management."""
         lines = []
         mgmt_ip = switch.get("management_ip")
+        
+        # Se não estiver no topo, procura dentro das VLANs
+        if not mgmt_ip:
+            for vlan in switch.get("vlans", []):
+                if vlan.get("management_ip"):
+                    mgmt_ip = vlan.get("management_ip")
+                    break
 
         if not mgmt_ip:
             return lines
@@ -113,11 +125,15 @@ class SwitchConfigGenerator:
         # Encontra VLAN da interface de management
         mgmt_vlan = None
         for vlan in switch.get("vlans", []):
+            if vlan.get("management_ip") == mgmt_ip:
+                mgmt_vlan = vlan.get("id") or vlan.get("vlan")
+                break
+            
             netstr = vlan.get("network")
             if netstr:
                 try:
                     netobj = ipaddress.ip_network(netstr, strict=False)
-                    if str(mgmt_ip).startswith(str(netobj.network_address)):
+                    if ipaddress.ip_address(mgmt_ip) in netobj:
                         mgmt_vlan = vlan.get("id") or vlan.get("vlan")
                         break
                 except (ipaddress.AddressValueError, ipaddress.NetmaskValueError):
@@ -154,6 +170,21 @@ class SwitchConfigGenerator:
 
         return lines
 
+    def _translate_iface(self, iface: Optional[str]) -> Optional[str]:
+        """Traduz abreviações (fa, gi, se) para nomes completos Cisco."""
+        if not iface:
+            return None
+        
+        low = iface.lower()
+        if low.startswith("fa"):
+            return iface.replace(iface[:2], "FastEthernet")
+        if low.startswith("gi"):
+            return iface.replace(iface[:2], "GigabitEthernet")
+        if low.startswith("se"):
+            return iface.replace(iface[:2], "Serial")
+        
+        return iface
+
     def _generate_host_ports(self, switch: Dict) -> List[str]:
         """Gera configuração de portas para hosts."""
         lines = []
@@ -162,8 +193,9 @@ class SwitchConfigGenerator:
         for host in switch.get("hosts", []):
             port = host.get("port") or host.get("interface")
             if port:
+                phys_port = self._translate_iface(port)
                 vlan = switch.get("access_vlan", 1)
-                lines.append(f"interface {port}")
+                lines.append(f"interface {phys_port}")
                 lines.append(f" description host {host.get('name')}")
                 lines.append(f" switchport access vlan {vlan}")
                 lines.append(" no shutdown")
@@ -173,8 +205,9 @@ class SwitchConfigGenerator:
             for host in vlan.get("hosts", []):
                 port = host.get("port") or host.get("interface")
                 if port:
+                    phys_port = self._translate_iface(port)
                     vid = vlan.get("id") or vlan.get("vlan")
-                    lines.append(f"interface {port}")
+                    lines.append(f"interface {phys_port}")
                     lines.append(f" description host {host.get('name')}")
                     lines.append(f" switchport access vlan {vid}")
                     lines.append(" no shutdown")
@@ -182,31 +215,34 @@ class SwitchConfigGenerator:
         return lines
 
     def _generate_uplink_trunk(self, switch: Dict) -> List[str]:
-        """Gera configuração de trunk para uplink."""
+        """Gera configuração de trunk para uplink ou outro switch."""
         lines = []
-
-        if not switch.get("uplink"):
+        
+        target = switch.get("uplink") or switch.get("trunk_to")
+        if not target:
             return lines
 
         # Interface do uplink
-        uplink_iface = switch.get("uplink_interface") or self.config.get("interfaces.switch.trunk_default")
+        raw_if = switch.get("uplink_interface") or self.config.get("interfaces.switch.trunk_default")
+        uplink_iface = self._translate_iface(raw_if)
+        
         lines.append(f"interface {uplink_iface}")
-        lines.append(f" description trunk to {switch.get('uplink')}")
+        lines.append(f" description trunk to {target}")
         lines.append(" switchport trunk encapsulation dot1q")
         lines.append(" switchport mode trunk")
 
         # Native VLAN
         native_vlan = self.config.get("vlans.native_vlan")
-        for vlan in switch.get("vlans", []):
-            vid = vlan.get("id") or vlan.get("vlan")
-            if vid == native_vlan:
-                lines.append(f" switchport trunk native vlan {native_vlan}")
-                break
+        if native_vlan:
+            lines.append(f" switchport trunk native vlan {native_vlan}")
 
         # Allowed VLANs
-        allowed = ",".join(str(v.get("id") or v.get("vlan")) for v in switch.get("vlans", []))
-        if allowed:
-            lines.append(f" switchport trunk allowed vlan {allowed}")
+        allowed_ids = [str(v.get("id") or v.get("vlan")) for v in switch.get("vlans", [])]
+        if allowed_ids:
+            # Garante que a nativa está nas permitidas se não estiver
+            if str(native_vlan) not in allowed_ids:
+                allowed_ids.append(str(native_vlan))
+            lines.append(f" switchport trunk allowed vlan {','.join(allowed_ids)}")
 
         lines.append(" no shutdown")
 

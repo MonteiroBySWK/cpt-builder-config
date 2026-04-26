@@ -20,7 +20,51 @@ class YamlLoader:
         self.nets_file = nets_file
         self.topo_file = topo_file
         self.networks = self._load_yaml(nets_file)
+
+        # Extrair variáveis de substituição (x, y, w, z)
+        self.variables = self.networks.get("base", {})
+
+        # Aplicar substituição nas redes e topologia
+        self.networks = self._apply_variables(self.networks)
+
         self.topology = self._load_topology(topo_file)
+        self.topology = self._apply_variables(self.topology)
+
+    def _apply_variables(self, data: Any) -> Any:
+        """Recursivamente substitui variáveis (x, y, w, z) nos valores."""
+        if isinstance(data, dict):
+            return {k: self._apply_variables(v) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [self._apply_variables(i) for i in data]
+        elif isinstance(data, str):
+            # Substitui cada variável definida no bloco base
+            original = data
+            for var_name, var_value in self.variables.items():
+                if not isinstance(var_name, str):
+                    continue
+                # Substitui a letra isolada (ex: .x. por .1.)
+                # Tratamos tanto o caso de estar no meio quanto no fim/início
+                # Ex: 172.16.x.1 ou x.y.w.z
+                parts = data.split('.')
+                new_parts = []
+                for p in parts:
+                    # Se a parte for exatamente o nome da variável (ou contiver a variável antes da máscara /)
+                    if "/" in p:
+                        octet, mask = p.split("/", 1)
+                        if octet.lower() == var_name.lower():
+                            new_parts.append(f"{var_value}/{mask}")
+                        else:
+                            new_parts.append(p)
+                    elif p.lower() == var_name.lower():
+                        new_parts.append(str(var_value))
+                    else:
+                        new_parts.append(p)
+                data = ".".join(new_parts)
+            return data
+        return data
+
+    @staticmethod
+
 
     @staticmethod
     def _load_yaml(path: str) -> Dict[str, Any]:

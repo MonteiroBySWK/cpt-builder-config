@@ -49,10 +49,11 @@ class ConfigManager:
         },
     }
 
-    def __init__(self, config_file: str = "config.yml", topology_file: str = "topology.yml"):
+    def __init__(self, config_file: str = "config.yml", topology_file: str = "topology.yml", variables: Optional[Dict] = None):
         """Inicializa ConfigManager."""
         self.config_file = config_file
         self.topology_file = topology_file
+        self.variables = variables or {}
         self.config = self._load_config()
 
     def _load_config(self) -> Dict[str, Any]:
@@ -70,7 +71,39 @@ class ConfigManager:
                 config = self._deep_merge(config, topo["global_config"])
 
         config = self._merge_env_vars(config)
+        
+        # Aplicar substituição de variáveis
+        if self.variables:
+            config = self._apply_variables(config)
+            
         return config
+
+    def _apply_variables(self, data: Any) -> Any:
+        """Recursivamente substitui variáveis (x, y, w, z) nos valores."""
+        if isinstance(data, dict):
+            return {k: self._apply_variables(v) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [self._apply_variables(i) for i in data]
+        elif isinstance(data, str):
+            for var_name, var_value in self.variables.items():
+                if not isinstance(var_name, str):
+                    continue
+                parts = data.split('.')
+                new_parts = []
+                for p in parts:
+                    if "/" in p:
+                        octet, mask = p.split("/", 1)
+                        if octet.lower() == var_name.lower():
+                            new_parts.append(f"{var_value}/{mask}")
+                        else:
+                            new_parts.append(p)
+                    elif p.lower() == var_name.lower():
+                        new_parts.append(str(var_value))
+                    else:
+                        new_parts.append(p)
+                data = ".".join(new_parts)
+            return data
+        return data
 
     def _load_yaml(self, path: str) -> Optional[Dict[str, Any]]:
         """Carrega arquivo YAML."""

@@ -3,160 +3,195 @@ topology:
     - name: REITORIA
       connects:
         - type: lan
-          network: 172.16.1.64/27
+          network: 172.16.x.64/27
           switch: SW_REITORIA
+          interface: gi0/0
         - type: p2p
           link: REITORIA-NTI
-          network: 172.16.1.240/30
-          local_ip: 172.16.1.241
-          remote_ip: 172.16.1.242
+          network: 172.16.x.240/30
+          local_ip: 172.16.x.241
+          remote_ip: 172.16.x.242
+          interface: se0/1/0
         - type: p2p
           link: REITORIA-CCT
-          network: 172.16.1.244/30
-          local_ip: 172.16.1.245
-          remote_ip: 172.16.1.246
+          network: 172.16.x.244/30
+          local_ip: 172.16.x.245
+          remote_ip: 172.16.x.246
+          interface: se0/1/1
 
     - name: NTI
       connects:
         - type: lan
           networks:
-            - 172.16.1.96/27
-            - 172.16.1.128/27
-            - 172.16.1.160/27
-            - 172.16.1.192/27
+            - 172.16.x.96/27
+            - 172.16.x.128/27
+            - 172.16.x.160/27
+            - 172.16.x.192/27
           switches:
             - SW1_NTI
             - SW2_NTI
+          interface: gi0/0
         - type: p2p
           link: REITORIA-NTI
-          network: 172.16.1.240/30
-          local_ip: 172.16.1.242
-          remote_ip: 172.16.1.241
+          network: 172.16.x.240/30
+          local_ip: 172.16.x.242
+          remote_ip: 172.16.x.241
+          interface: se0/1/0
         - type: p2p
           link: NTI-CCT
-          network: 172.16.1.248/30
-          local_ip: 172.16.1.249
-          remote_ip: 172.16.1.250
+          network: 172.16.x.248/30
+          local_ip: 172.16.x.249
+          remote_ip: 172.16.x.250
+          interface: se0/1/1
         - type: internet
+          link: INTERNET
           network: 90.90.90.0/30
           local_ip: 90.90.90.1
           remote_ip: 90.90.90.2
+          interface: se0/1/2
 
     - name: CCT
       connects:
         - type: lan
-          network: 172.16.1.224/28
+          network: 172.16.x.224/28
           switch: SW1_CCT
+          interface: gi0/0
         - type: p2p
           link: REITORIA-CCT
-          network: 172.16.1.244/30
-          local_ip: 172.16.1.246
-          remote_ip: 172.16.1.245
+          network: 172.16.x.244/30
+          local_ip: 172.16.x.246
+          remote_ip: 172.16.x.245
+          interface: se0/1/0
         - type: p2p
           link: NTI-CCT
-          network: 172.16.1.248/30
-          local_ip: 172.16.1.250
-          remote_ip: 172.16.1.249
+          network: 172.16.x.248/30
+          local_ip: 172.16.x.250
+          remote_ip: 172.16.x.249
+          interface: se0/1/1
+
+    - name: ISP
+      connects:
+        - type: p2p
+          link: INTERNET
+          network: 90.90.90.0/30
+          local_ip: 90.90.90.2
+          remote_ip: 90.90.90.1
+          interface: se0/1/0
+        - type: lan
+          network: 8.8.8.0/24
+          interface: gi0/0
 
   switches:
     - name: SW_REITORIA
       uplink: REITORIA
+      uplink_interface: gi0/1
       access_vlan: 1
+      management_ip: 172.16.x.67
       hosts:
         - name: HOST 1
-          ip: 172.16.1.65
+          ip: 172.16.x.65
+          port: fa0/1
         - name: HOST 2
-          ip: 172.16.1.66
+          ip: 172.16.x.66
+          port: fa0/2
 
     - name: SW1_CCT
       uplink: CCT
+      uplink_interface: gi0/1
       access_vlan: 1
+      management_ip: 172.16.x.227
       hosts:
         - name: HOST 3
-          ip: 172.16.1.225
+          ip: 172.16.x.225
+          port: fa0/1
         - name: HOST 4
-          ip: 172.16.1.226
+          ip: 172.16.x.226
+          port: fa0/2
 
     - name: SW1_NTI
       uplink: NTI
+      uplink_interface: gi0/1
       trunk_to: NTI
       vlans:
         - id: 10
-          network: 172.16.1.96/27
+          network: 172.16.x.96/27
           hosts:
             - name: HOST 5
-              ip: 172.16.1.97
+              ip: 172.16.x.97
+              port: fa0/1
             - name: HOST 6
-              ip: 172.16.1.98
+              ip: 172.16.x.98
+              port: fa0/2
         - id: 20
-          network: 172.16.1.128/27
+          network: 172.16.x.128/27
           hosts:
             - name: HOST 7
-              ip: 172.16.1.129
+              ip: 172.16.x.129
+              port: fa0/3
             - name: HOST 8
-              ip: 172.16.1.130
+              ip: 172.16.x.130
+              port: fa0/4
         - id: 30
-          network: 172.16.1.160/27
+          network: 172.16.x.160/27
           hosts:
             - name: SERVERWEB
-              ip: 172.16.1.161
+              ip: 172.16.x.161
+              port: fa0/5
             - name: SERVERDNS
-              ip: 172.16.1.162
+              ip: 172.16.x.162
+              port: fa0/6
         - id: 99
-          network: 172.16.1.192/27
-          management_ip: 172.16.1.193
+          network: 172.16.x.192/27
+          management_ip: 172.16.x.193
 
     - name: SW2_NTI
       uplink: NTI
+      uplink_interface: gi0/1
       trunk_to: SW1_NTI
       vlans:
         - id: 10
-          network: 172.16.1.96/27
+          network: 172.16.x.96/27
         - id: 20
-          network: 172.16.1.128/27
+          network: 172.16.x.128/27
         - id: 30
-          network: 172.16.1.160/27
+          network: 172.16.x.160/27
         - id: 99
-          network: 172.16.1.192/27
+          network: 172.16.x.192/27
 
   links:
     - name: REITORIA-NTI
-      network: 172.16.1.240/30
+      network: 172.16.x.240/30
       endpoints:
         - device: REITORIA
-          ip: 172.16.1.241
-          interface: Serial0/0/0
+          ip: 172.16.x.241
+          interface: se0/1/0
         - device: NTI
-          ip: 172.16.1.242
-          interface: Serial0/0/0
+          ip: 172.16.x.242
+          interface: se0/1/0
     - name: REITORIA-CCT
-      network: 172.16.1.244/30
+      network: 172.16.x.244/30
       endpoints:
         - device: REITORIA
-          ip: 172.16.1.245
-          interface: Serial0/0/1
+          ip: 172.16.x.245
+          interface: se0/1/1
         - device: CCT
-          ip: 172.16.1.246
-          interface: Serial0/0/0
+          ip: 172.16.x.246
+          interface: se0/1/0
     - name: NTI-CCT
-      network: 172.16.1.248/30
+      network: 172.16.x.248/30
       endpoints:
         - device: NTI
-          ip: 172.16.1.249
-          interface: Serial0/0/2
+          ip: 172.16.x.249
+          interface: se0/1/1
         - device: CCT
-          ip: 172.16.1.250
-          interface: Serial0/0/1
+          ip: 172.16.x.250
+          interface: se0/1/1
     - name: INTERNET
       network: 90.90.90.0/30
       endpoints:
         - device: NTI
           ip: 90.90.90.1
-          interface: Serial0/0/3
+          interface: se0/1/2
         - device: ISP
           ip: 90.90.90.2
-          interface: Serial0/0/0
-
-  notes:
-    - "Tronco entre SW1_NTI e SW2_NTI transporta VLANs 10,20,30,99 (nativa 99)."
-    - "Router-on-a-stick: subinterfaces no NTI para VLANs 10/20/30/99."
+          interface: se0/1/0
