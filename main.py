@@ -19,8 +19,18 @@ Dependências:
 import sys
 import os
 
-# Adicionar src ao path
-sys.path.insert(0, os.path.dirname(__file__))
+# Ajuste para PyInstaller localizar o pacote 'src'
+if getattr(sys, 'frozen', False):
+    # Executando no bundle (PyInstaller)
+    base_path = sys._MEIPASS
+    # Se a pasta src foi incluída via --add-data "src:src"
+    src_path = os.path.join(base_path, 'src')
+    if os.path.exists(src_path):
+        sys.path.insert(0, base_path)
+else:
+    # Executando normalmente
+    base_path = os.path.dirname(os.path.abspath(__file__))
+    sys.path.insert(0, base_path)
 
 from src.config_builder import ConfigBuilder
 

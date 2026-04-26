@@ -14,8 +14,11 @@ O arquivo `config.yml` armazena as definições globais, parâmetros de seguran�
 
 ## 3. Credenciais (credentials)
 
+Diferente de versões anteriores, as senhas agora podem ser definidas diretamente neste arquivo para facilitar o uso portátil:
+
 - **username:** Nome do usuário administrador local.
-*Nota: Senhas não devem ser declaradas neste arquivo. Devem ser fornecidas via variáveis de ambiente.*
+- **password:** Senha para acesso SSH/VTY.
+- **enable_password:** Senha para acesso ao modo privilegiado.
 
 ## 4. Padrões de Interface (interfaces)
 
@@ -25,7 +28,7 @@ Define os prefixos e slots padrão caso não sejam especificados no `topology.ym
 - **default_prefix:** Prefixo para interfaces LAN (ex: `GigabitEthernet`).
 - **default_slot:** Slot inicial para interfaces LAN.
 - **p2p_prefix:** Prefixo para interfaces de link ponto-a-ponto (ex: `Serial`).
-- **p2p_slot:** Slot inicial para interfaces P2P.
+- **p2p_slot:** Slot inicial para interfaces P2P (ex: `0/0`).
 
 ### Switch (switch)
 - **trunk_default:** Porta padrão para conexões de uplink e trunk.
@@ -38,5 +41,4 @@ Define os prefixos e slots padrão caso não sejam especificados no `topology.ym
 
 ## 6. Segurança (security)
 
-- **password_encryption:** Habilita o comando `service password-encryption` para criptografar senhas no arquivo de configuração.
-- **aaa_enabled:** Parâmetro para futura implementação de autenticação centralizada.
+- **password_encryption:** Habilita o comando `service password-encryption` para criptografar senhas no arquivo de configuração final.

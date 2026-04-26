@@ -10,10 +10,11 @@ ssh:
   vty_range: "0 4"        # vty 0 até 4
   transport: ssh          # ssh ou telnet (recomenda-se ssh)
 
-# Credenciais - NUNCA coloque senhas aqui! Use variáveis de ambiente (.env)
+# Credenciais
 credentials:
   username: admin
-  # password e enable_password vêm de variáveis de ambiente
+  password: adminssh
+  enable_password: root
 
 # Interfaces de rede (padrões)
 interfaces:

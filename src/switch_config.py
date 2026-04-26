@@ -60,8 +60,8 @@ class SwitchConfigGenerator:
 
         # Credenciais
         username = self.config.get("credentials.username")
-        ssh_pass = os.getenv("CPT_CREDENTIALS_PASSWORD") or os.getenv("CISCO_SSH_PASS", "adminssh")
-        enable_pass = os.getenv("CPT_CREDENTIALS_ENABLE_PASSWORD") or os.getenv("CISCO_ENABLE_PASS", "root")
+        ssh_pass = self.config.get("credentials.password")
+        enable_pass = self.config.get("credentials.enable_password")
 
         lines.append(f"username {username} secret {ssh_pass}")
         lines.append(f"enable secret {enable_pass}")
