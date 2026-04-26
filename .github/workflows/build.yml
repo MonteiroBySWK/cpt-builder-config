@@ -75,12 +75,20 @@ jobs:
         with:
           path: artifacts
 
+      - name: List downloaded artifacts
+        run: find artifacts -type f
+
+      - name: Organize artifacts
+        run: |
+          mkdir -p release_assets
+          cp artifacts/cisco_gen-linux/cisco_gen release_assets/cisco_gen-linux
+          cp artifacts/cisco_gen-windows.exe/cisco_gen.exe release_assets/cisco_gen-windows.exe
+          cp artifacts/cisco_gen-macos/cisco_gen release_assets/cisco_gen-macos
+
       - name: Create Release
         run: |
           gh release create v${{ github.run_number }} \
-            artifacts/cisco_gen-linux/cisco_gen \
-            artifacts/cisco_gen-windows.exe/cisco_gen.exe \
-            artifacts/cisco_gen-macos/cisco_gen \
+            release_assets/* \
             --title "Release ${{ github.run_number }}" \
             --notes "Automated release with executables for Linux, Windows, and macOS" \
             --repo ${{ github.repository }}
