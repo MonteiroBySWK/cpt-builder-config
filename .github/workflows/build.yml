@@ -73,13 +73,13 @@ jobs:
           path: artifacts
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            artifacts/cisco_gen-linux/cisco_gen
-            artifacts/cisco_gen-windows.exe/cisco_gen.exe
-            artifacts/cisco_gen-macos/cisco_gen
-          tag_name: v${{ github.run_number }}
-          name: Release ${{ github.run_number }}
+        run: |
+          gh release create v${{ github.run_number }} \
+            artifacts/cisco_gen-linux/cisco_gen \
+            artifacts/cisco_gen-windows.exe/cisco_gen.exe \
+            artifacts/cisco_gen-macos/cisco_gen \
+            --title "Release ${{ github.run_number }}" \
+            --notes "Automated release with executables for Linux, Windows, and macOS" \
+            --repo ${{ github.repository }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
