@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 build.py - Gerador de executável portátil.
 
@@ -10,11 +11,16 @@ import os
 import subprocess
 import sys
 import shutil
+import io
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SCRIPT_NAME = "main.py"
 DIST_DIR = os.path.join(BASE_DIR, "dist")
 BUILD_DIR = os.path.join(BASE_DIR, "build")
+
+# Fix encoding for Windows support with UTF-8 characters
+if sys.platform == "win32":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 def clean_old_builds():
     """Limpa diretórios de build de forma portável."""
